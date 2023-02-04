@@ -386,6 +386,20 @@ strip_ansi() {
 	fi
 }
 
+# pipe the output through `tee -a` if TEE is set, otherwise just append to the
+# file
+#
+# accepts a file as an arg which is used as the target
+# (file checked at the call site)
+TEE=
+maybe_tee() {
+	if [[ $TEE ]]; then
+		tee -a "$1"
+	else
+		cat >>"$1"
+	fi
+}
+
 ### verification
 verifyservice() {
 	for s in $SERVICES; do
@@ -943,11 +957,9 @@ else
 	fi
 fi
 
-# create tmpfile for use with tee
-if [[ $TEE ]]; then
-	TMPF=$(mktemp -q --tmpdir wgetpaste.XXXXXX)
-	[[ -f $TMPF ]] || die "Could not create a temporary file for use with tee."
-fi
+# create tmpfile
+TMPF="$(mktemp -q --tmpdir wgetpaste.XXXXXX)"
+[[ -f "$TMPF" ]] || die "Could not create a temporary file."
 
 # read input
 case "$SOURCE" in
@@ -956,57 +968,33 @@ case "$SOURCE" in
 	;;
 	command )
 	for c in "${COMMANDS[@]}"; do
-		if [[ $TEE ]]; then
-			echo "$PS1 $c$N$(bash -c "$c" 2>&1 | strip_ansi)$N" | tee -a "$TMPF"
-		else
-			INPUT="$INPUT$PS1 $c$N$(bash -c "$c" 2>&1 | strip_ansi)$N$N"
-		fi
+		echo "$PS1 $c$N$(bash -c "$c" 2>&1 | strip_ansi)$N" | maybe_tee "$TMPF"
 	done
 	;;
 	info )
-	if [[ $TEE ]]; then
-		echo "$PS1 $INFO_COMMAND$N$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)" | tee "$TMPF"
-	else
-		INPUT="$PS1 $INFO_COMMAND$N$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)"
-	fi
+	echo "$PS1 $INFO_COMMAND$N$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)" | maybe_tee "$TMPF"
 	;;
 	xcut )
-	if [[ $TEE ]]; then
-		x_cut | strip_ansi | tee "$TMPF"
-	else
-		INPUT="$(x_cut | strip_ansi)"
-	fi
+	x_cut | strip_ansi | maybe_tee "$TMPF"
 	;;
 	stdin )
-		if [[ $TEE ]]; then
-			strip_ansi | tee "$TMPF"
-		else
-			INPUT="$(strip_ansi)"
-		fi
+	strip_ansi | maybe_tee "$TMPF"
 	;;
 	files )
 	if [[ ${#FILES[@]} -gt 1 ]]; then
 		for f in "${FILES[@]}"; do
 			[[ -r $f ]] || notreadable "$f"
-			if [[ $TEE ]]; then
-				echo "$PS1 cat $f$N$(strip_ansi "$f")$N" | tee -a "$TMPF"
-			else
-				INPUT="$INPUT$PS1 cat $f$N$(strip_ansi "$f")$N$N"
-			fi
+			echo "$PS1 cat $f$N$(strip_ansi "$f")$N" | maybe_tee "$TMPF"
 		done
 	else
 		[[ -r $FILES ]] || notreadable "$FILES"
-		if [[ $TEE ]]; then
-			strip_ansi "$FILES" | tee "$TMPF"
-		else
-			INPUT=$(strip_ansi "$FILES")
-		fi
+		strip_ansi "$FILES" | maybe_tee "$TMPF"
 	fi
 	;;
 esac
 NOINPUT="No input read. Nothing to paste. Aborting."
-if [[ $TEE ]]; then
-	[[ 0 -eq $(wc -c < "$TMPF") ]] && die "$NOINPUT"
+if [[ url != $SOURCE ]]; then
+	[[ -s "$TMPF" ]] || die "$NOINPUT"
 else
 	[[ -z $INPUT ]] && die "$NOINPUT"
 fi
@@ -1014,15 +1002,12 @@ fi
 # append info if needed
 if [[ $INFO ]]; then
 	DESCRIPTION="$DESCRIPTION $PS1 $INFO_COMMAND;"
-	if [[ $TEE ]]; then
-		echo "$N$PS1 $INFO_COMMAND$N$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)" | tee -a "$TMPF"
-	else
-		INPUT="$INPUT$N$PS1 $INFO_COMMAND$N$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)"
-	fi
+	echo "$N$PS1 $INFO_COMMAND$N$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)" | maybe_tee "$TMPF"
 fi
 
-# now that tee has done its job read data into INPUT
-[[ $TEE ]] && INPUT=$(<"$TMPF") && echo
+# get the data to be used as input, unless source is a url
+[[ url != $SOURCE ]] && INPUT=$(<"$TMPF")
+[[ $TEE ]] && echo
 
 # escape DESCRIPTION and INPUT
 if [[ function = $(type -t escape_description_$ENGINE) ]]; then
@@ -1119,3 +1104,5 @@ else
 fi
 
 exit 0
+
+# vim: set noexpandtab:
