@@ -8,10 +8,6 @@ VERSION="2.33"
 # don't inherit LANGUAGE from the env
 unset LANGUAGE
 
-# escape and new line characters
-E=$'\e'
-N=$'\n'
-
 # generic post function
 POST_generic() {
 	local post nick description language expiration cvt_tabs input nr extra f
@@ -318,7 +314,7 @@ REGEX_URL_sprunge='s|^http.*|\0|p'
 
 ### errors
 die() {
-	echo "$@" >&2
+	echo -e "$@" >&2
 	exit 1
 }
 
@@ -405,7 +401,7 @@ verifyservice() {
 	for s in $SERVICES; do
 		compare_tolower "$s" "$*" && return 0
 	done
-	echo "\"$*\" is not a supported service.$N" >&2
+	echo -e "\"$*\" is not a supported service.\n" >&2
 	showservices >&2
 	exit 1
 }
@@ -442,7 +438,7 @@ verifylanguage() {
 	else
 		[[ $LANGUAGESET = 0 ]] || return 0
 	fi
-	echo "\"$LANGUAGE\" is not a supported language for $(getrecipient).$N" >&2
+	echo -e "\"$LANGUAGE\" is not a supported language for $(getrecipient).\n" >&2
 	showlanguages >&2
 	exit 1
 }
@@ -479,7 +475,7 @@ verifyexpiration() {
 	else
 		[[ $EXPIRATIONSET = 0 ]] || return 0
 	fi
-	echo "\"$EXPIRATION\" is not a supported expiration option for $(getrecipient).$N" >&2
+	echo -e "\"$EXPIRATION\" is not a supported expiration option for $(getrecipient).\n" >&2
 	showexpirations >&2
 	exit 1
 }
@@ -608,16 +604,16 @@ showservices() {
 			[[ ${#s} -gt $max ]] && max=${#s}
 		done
 		((INDV=3+max+IND))
-		engine=" $E[${INDV}G| Pastebin engine:"
+		engine=" \e[${INDV}G| Pastebin engine:"
 	fi
-	echo "   Name: $E[${IND}G| Url:$engine"
+	echo -e "   Name: \e[${IND}G| Url:$engine"
 	echo -ne "   "; for((s=3;s<${INDV:-${IND}}+17;s++)); do (( $s == IND-1 || $s == INDV-1 )) && echo -ne "|" || echo -ne "="; done; echo
 	for s in $SERVICES; do
 		[[ $s = $DEFAULT_SERVICE ]] && d="*" || d=" "
-		[[ $VERBOSE ]] && engine=ENGINE_$s && engine="$E[${INDV}G| ${!engine}"
+		[[ $VERBOSE ]] && engine=ENGINE_$s && engine="\e[${INDV}G| ${!engine}"
 		url=URL_$s
 		url=${!url% *}
-		echo "   $d$s $E[${IND}G| $url$engine"
+		echo -e "   $d$s \e[${IND}G| $url$engine"
 	done | sort
 }
 
@@ -633,7 +629,7 @@ showlanguages() {
 	lang=LANGUAGES_$ENGINE
 	[[ -n $COMPLETIONS ]] && printlist ${!lang} | sort && exit 0
 	echo "Languages supported by $(getrecipient) (case sensitive):"
-	[[ -z ${!lang} ]] && echo "$N\"$ENGINE\" has no support for setting language." >&2 && exit 1
+	[[ -z ${!lang} ]] && echo -e "\n\"$ENGINE\" has no support for setting language." >&2 && exit 1
 	for l in ${!lang}; do
 		[[ ${l//\%/ } = $DEFAULT_LANGUAGE ]] && d="*" || d=" "
 		echo "   $d${l//\%/ }"
@@ -646,7 +642,7 @@ showexpirations() {
 	[[ -n $COMPLETIONS ]] && printlist ${!expiration} && exit 0
 	echo "Expiration options supported by $(getrecipient) (case sensitive):"
 	info=EXPIRATION_INFO_$SERVICE
-	[[ -z ${!expiration} ]] && echo "$N${!info}\"$ENGINE\" has no support for setting expiration." >&2 && exit 1
+	[[ -z ${!expiration} ]] && echo -e "\n${!info}\"$ENGINE\" has no support for setting expiration." >&2 && exit 1
 	for e in ${!expiration}; do
 		[[ ${e//\%/ } = $DEFAULT_EXPIRATION ]] && d="*" || d=" "
 		echo "   $d${e//\%/ }"
@@ -863,7 +859,7 @@ load_configs() {
 		for f in {/etc/,~/.}wgetpaste{.d/*.bash,}; do
 			if [[ -f $f ]]; then
 				if [[ -z $deprecated ]]; then
-					echo "The config files for wgetpaste have changed to *.conf.$N" >&2
+					echo -e "The config files for wgetpaste have changed to *.conf.\n" >&2
 					deprecated=0
 				fi
 				echo "Please move ${f} to ${f%.bash}.conf" >&2
@@ -968,11 +964,11 @@ case "$SOURCE" in
 	;;
 	command )
 	for c in "${COMMANDS[@]}"; do
-		echo "$PS1 $c$N$(bash -c "$c" 2>&1 | strip_ansi)$N" | maybe_tee "$TMPF"
+		echo -e "$PS1 $c\n$(bash -c "$c" 2>&1 | strip_ansi)\n" | maybe_tee "$TMPF"
 	done
 	;;
 	info )
-	echo "$PS1 $INFO_COMMAND$N$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)" | maybe_tee "$TMPF"
+	echo -e "$PS1 $INFO_COMMAND\n$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)" | maybe_tee "$TMPF"
 	;;
 	xcut )
 	x_cut | strip_ansi | maybe_tee "$TMPF"
@@ -984,7 +980,7 @@ case "$SOURCE" in
 	if [[ ${#FILES[@]} -gt 1 ]]; then
 		for f in "${FILES[@]}"; do
 			[[ -r $f ]] || notreadable "$f"
-			echo "$PS1 cat $f$N$(strip_ansi "$f")$N" | maybe_tee "$TMPF"
+			echo -e "$PS1 cat $f\n$(strip_ansi "$f")\n" | maybe_tee "$TMPF"
 		done
 	else
 		[[ -r $FILES ]] || notreadable "$FILES"
@@ -1002,7 +998,7 @@ fi
 # append info if needed
 if [[ $INFO ]]; then
 	DESCRIPTION="$DESCRIPTION $PS1 $INFO_COMMAND;"
-	echo "$N$PS1 $INFO_COMMAND$N$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)" | maybe_tee "$TMPF"
+	echo -e "\n$PS1 $INFO_COMMAND\n$($INFO_COMMAND $INFO_ARGS 2>&1 | strip_ansi)" | maybe_tee "$TMPF"
 fi
 
 # get the data to be used as input, unless source is a url
@@ -1089,7 +1085,7 @@ verifyurl
 # handle the case when there was no location returned
 if [[ -z $URL ]]; then
 	if [[ $DEBUG || $VERBOSE ]]; then
-		die "Apparently nothing was received. Perhaps the connection failed.$N$OUTPUT"
+		die "Apparently nothing was received. Perhaps the connection failed.\n$OUTPUT"
 	else
 		echo "Apparently nothing was received. Perhaps the connection failed. Enable --verbose or" >&2
 		die "--debug to get the output from wget that can help diagnose it correctly."
