@@ -36,25 +36,33 @@ POST_generic() {
 	e "${post#$extra }" nick description language expiration cvt_tabs input
 }
 
+### helpers for size calculations
+declare -i KiB=1024
+declare -i MiB=$((1024 * KiB))
+
+declare -i kB=1000
+declare -i MB=$((1000 * kB))
+
 ### services
 SERVICES="0x0 bpaste codepad dpaste gists ix_io snippets sprunge"
 # 0x0
 ENGINE_0x0=0x0
 URL_0x0="http://0x0.st"
-SIZE_0x0="536870912 536%MB"
+SIZE_0x0=($((512 * MiB)) '512 MiB')
 # bpaste
 ENGINE_bpaste=pinnwand
 URL_bpaste="https://bpa.st/api/v1/paste"
+SIZE_bpaste=($((113 * KiB)) '113 KiB')
 DEFAULT_EXPIRATION_bpaste="1week"
 DEFAULT_LANGUAGE_bpaste="text"
 # codepad
 ENGINE_codepad=codepad
 URL_codepad="http://codepad.org/"
-SIZE_codepad="64000 64%KB"
+SIZE_codepad=($((64 * kB)) '64 kB')
 # dpaste
 ENGINE_dpaste=dpaste
 URL_dpaste="http://dpaste.com/api/v2/"
-SIZE_dpaste="250000 250%kB"
+SIZE_dpaste=($((250 * kB)) '250 kB')
 DESCRIPTION_SIZE_dpaste="50"
 DEFAULT_EXPIRATION_dpaste="1"
 # gists
@@ -63,7 +71,7 @@ URL_gists="https://api.github.com/gists"
 # ix_io
 ENGINE_ix_io=ix_io
 URL_ix_io="http://ix.io"
-SIZE_ix_io="1000000 1%MB"
+SIZE_ix_io=($((1 * MB)) '1 MB')
 # snippets
 ENGINE_snippets=snippets
 URL_snippets="https://gitlab.com/api/v4/snippets"
@@ -71,7 +79,6 @@ ADDITIONAL_HEADERS_snippets=("Content-Type: application/json")
 # sprunge
 ENGINE_sprunge=sprunge
 URL_sprunge="http://sprunge.us"
-SIZE_sprunge="1000000 1%MB"
 # tinyurl
 ENGINE_tinyurl=tinyurl
 URL_tinyurl="http://tinyurl.com/ api-create.php"
@@ -491,20 +498,32 @@ verifyurl() {
 	done
 }
 
-# print a warning if failure is predictable due to the mere size of the paste. note that this is only a warning
-# printed. it does not abort.
-warnings() {
-	warn() {
-		if [[ -n $2 && $1 -gt $2 ]]; then
-			echo "Pasting > ${3//\%/ } often tend to fail with $SERVICE. Use --verbose or --debug to see the"
-			echo "error output from wget if it fails. Alternatively use another pastebin service."
-		fi
-	}
-	local size lines
-	size=SIZE_$SERVICE
-	warn "$SIZE" "${!size% *}" "${!size#* }"
-	lines=LINES_$SERVICE
-	warn "$LINES" "${!lines}" "${!lines} lines"
+# verify that the input is not too large for the currently selected service
+#
+# accepts an arg containing the size of the current input
+#
+# use sprunge as the fallback service because I have had occasional issues with
+# pasting to 0x0 (the other Very Large Paste Service (TM))
+# - oskari
+#
+# NOTE: sprunge has no need to re-verify language or expiration since it does
+# not provide options to set those
+FALLBACK_SERVICE=sprunge
+verifysize() {
+	local -n constraints=SIZE_$SERVICE
+	local size=${constraints[0]}
+	local size_text=${constraints[1]}
+
+	if [[ -n $size && $1 -gt $size ]]; then
+		echo "Pastes of >$size_text are too large for $SERVICE. Retrying using $FALLBACK_SERVICE..." >&2
+		SERVICE=$FALLBACK_SERVICE
+		ENGINE=ENGINE_$SERVICE
+		ENGINE="${!ENGINE}"
+
+		false
+	else
+		true
+	fi
 }
 
 ### input
@@ -958,9 +977,10 @@ TMPF="$(mktemp -q --tmpdir wgetpaste.XXXXXX)"
 [[ -f "$TMPF" ]] || die "Could not create a temporary file."
 
 # read input
+RAW_INPUT=
 case "$SOURCE" in
 	url )
-	INPUT="${INPUTURL}"
+	RAW_INPUT="${INPUTURL}"
 	;;
 	command )
 	for c in "${COMMANDS[@]}"; do
@@ -992,7 +1012,7 @@ NOINPUT="No input read. Nothing to paste. Aborting."
 if [[ url != $SOURCE ]]; then
 	[[ -s "$TMPF" ]] || die "$NOINPUT"
 else
-	[[ -z $INPUT ]] && die "$NOINPUT"
+	[[ -z $RAW_INPUT ]] && die "$NOINPUT"
 fi
 
 # append info if needed
@@ -1002,25 +1022,28 @@ if [[ $INFO ]]; then
 fi
 
 # get the data to be used as input, unless source is a url
-[[ url != $SOURCE ]] && INPUT=$(<"$TMPF")
+[[ url != $SOURCE ]] && RAW_INPUT=$(<"$TMPF")
 [[ $TEE ]] && echo
 
-# escape DESCRIPTION and INPUT
+# escape RAW_INPUT in order to check if the size is within the constraints of
+# the chosen service
+NEEDS_REESCAPE=1
+while [[ $NEEDS_REESCAPE ]]; do
+	if [[ function = $(type -t escape_input_$ENGINE) ]]; then
+		INPUT=$(escape_input_$ENGINE "$RAW_INPUT")
+	else
+		INPUT=$(escape "$RAW_INPUT")
+	fi
+
+	verifysize $(wc -c <<< "$INPUT") && NEEDS_REESCAPE=
+done
+
+# escape DESCRIPTION once the size is verified and good service selected
 if [[ function = $(type -t escape_description_$ENGINE) ]]; then
 	DESCRIPTION=$(escape_description_$ENGINE "$DESCRIPTION")
 else
 	DESCRIPTION=$(escape "$DESCRIPTION")
 fi
-if [[ function = $(type -t escape_input_$ENGINE) ]]; then
-	INPUT=$(escape_input_$ENGINE "$INPUT")
-else
-	INPUT=$(escape "$INPUT")
-fi
-
-# print friendly warnings if max sizes have been specified for the pastebin service and the size exceeds that
-SIZE=$(wc -c <<< "$INPUT")
-LINES=$(wc -l <<< "$INPUT")
-warnings >&2
 
 # set recipient
 RECIPIENT=$(getrecipient RAW)
