@@ -1,9 +1,9 @@
-Max sizes as of 2023-01-29
+Max sizes as of 2023-02-11
 
 Service     | Advertised max size   | Tested max size
 ------------+-----------------------+----------------
 0x0         | 512 MiB               | test infeasible
-bpaste      | N/A (not mentioned)   | 113 KiB
+bpaste      | N/A (not mentioned)   | 255 KiB
 codepad     | N/A (pastes fail)     | N/A
 dpaste      | 250 kB (250 000 B)    | 250 kB (250 000 B)
 gists       | N/A (needs API key)   | N/A
