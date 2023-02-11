@@ -48,7 +48,8 @@ SERVICES="0x0 bpaste codepad dpaste gists ix_io snippets sprunge"
 # 0x0
 ENGINE_0x0=0x0
 URL_0x0="http://0x0.st"
-SIZE_0x0=($((512 * MiB)) '512 MiB')
+# we do not really need to check sizes for 0x0, but it is here ready
+# SIZE_0x0=($((512 * MiB)) '512 MiB')
 # bpaste
 ENGINE_bpaste=pinnwand
 URL_bpaste="https://bpa.st/api/v1/paste"
