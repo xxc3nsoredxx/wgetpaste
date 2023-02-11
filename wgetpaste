@@ -53,7 +53,7 @@ URL_0x0="http://0x0.st"
 # bpaste
 ENGINE_bpaste=pinnwand
 URL_bpaste="https://bpa.st/api/v1/paste"
-SIZE_bpaste=($((113 * KiB)) '113 KiB')
+SIZE_bpaste=($((255 * KiB)) '255 KiB')
 DEFAULT_EXPIRATION_bpaste="1week"
 DEFAULT_LANGUAGE_bpaste="text"
 # codepad
